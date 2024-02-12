@@ -39,7 +39,7 @@ corrplot(cor(x), method = "circle", type = "full",tl.cex = 0.5)
 cv.lasso <- cv.glmnet(x, y, 
                       alpha = 1, 
                       nfolds = 10,
-                      lambda = exp(seq(9, -5, length = 100)))
+                      lambda = exp(seq(10, -5, length = 100)))
 
 optimal_lambda <- cv.lasso$lambda.min  # Lambda that gives minimum mean cross-validated error
 lambda_1se <- cv.lasso$lambda.1se  # Lambda within 1SE of the minimum
@@ -49,7 +49,7 @@ lambda_1se <- cv.lasso$lambda.1se  # Lambda within 1SE of the minimum
 ```{r}
 plot(cv.lasso)
 ```
-When the selected tuning parameter is 49.85361, the test error is 21018.03.
+When the selected tuning parameter is 69.57632, the test error is 20970.16.
 ```{r}
 x_test <- model.matrix(Sale_Price ~ ., testing_data)[, -1]
 y_test <- testing_data$Sale_Price
@@ -58,7 +58,8 @@ lasso_model <- glmnet(x, y, alpha = 1, lambda = optimal_lambda)
 predictions <- predict(lasso_model, s = optimal_lambda, newx = x_test)
 
 test_error <- sqrt(mean((predictions - y_test)^2) ) # rmse
-print(test_error)
+optimal_lambda
+test_error
 ```
 
 
@@ -68,7 +69,7 @@ nonzero_coefficients <- sum(coef(lasso_model_1se, s = lambda_1se) != 0) - 1  # S
 print(nonzero_coefficients)
 ```
 
-When the 1SE rule is applied, 31 predictors are included in the model.
+When the 1SE rule is applied, 29 predictors are included in the model.
 
 # (b) Fit an elastic net model on the training data. Report the selected tuning parameters and the test error. Is it possible to apply the 1SE rule to select the tuning parameters for elastic net? If the 1SE rule is applicable, implement it to select the tuning parameters. If not, explain why.
 
@@ -80,7 +81,7 @@ elasticnet.fit <- train(x, y ,
                    data = training_data,
                    method = "glmnet",
                    tuneGrid = expand.grid(alpha = seq(0, 1, length = 21),
-                                          lambda = exp(seq(9, -5, length = 100))),
+                                          lambda = exp(seq(10, -5, length = 100))),
                    trControl = ctrl1)
 ```
 ```{r}
@@ -113,7 +114,7 @@ lambda_1se <- max(lambda_within_1se)  # most regularized model within 1SE
 lambda_1se
 ```
 
-When applying the 1SE rule, the best lambda is 8103.084.
+When applying the 1SE rule, the best lambda is 18929.65.
 
 # (c) Fit a partial least squares model on the training data and report the test error. How many components are included in your model?
 
@@ -139,7 +140,7 @@ enet_spec <- linear_reg(penalty = tune(), mixture = tune()) %>%
 
 # enet_spec %>% extract_parameter_dials("mixture")
 
-enet_grid_set <- parameters(penalty(range = c(-5,9), trans = log_trans()),
+enet_grid_set <- parameters(penalty(range = c(-5,10), trans = log_trans()),
                             mixture(range = c(0, 1)))
 enet_grid <- grid_regular(enet_grid_set, levels = c(100, 21))
 
@@ -191,7 +192,7 @@ lambda_1se
 ```
 
 
-The selected lambda is 732, and the selected mixture is 0.05. The Test Error is 20903.5. The lambda selected by the tydimodels(732) is different from caret (272.0703). And the selected alpha is different as well. However, when applying 1SE rule, the selected lambda is 8103.084 by tidymodels, which is the same with caret. The difference in selected tuning parameters (alpha and lambda) suggests that the optimization process and the cross-validation strategy might vary between caret and tidymodels. Each package may have different defaults for handling data splitting, grid search strategies, or even in the underlying implementation of the glmnet function. But the same lambda under 1se rule suggests that simpler models within a reasonable range of the minimum error can often provide similar performance with the benefit of being more interpretable and less likely to overfit.
+The selected lambda is 675.2963, and the selected mixture is 0.05. The Test Error is 20918.91. The lambda selected by the tydimodels(675.2963) is different from caret (272.0703). And the selected alpha is different as well. When applying 1SE rule, the selected lambda is 22026.47 by tidymodels, and the lambda selected by caret is 18929.65. The difference in selected tuning parameters (alpha and lambda) suggests that the optimization process and the cross-validation strategy might vary between caret and tidymodels. Each package may have different defaults for handling data splitting, grid search strategies, or even in the underlying implementation of the glmnet function.
 
 
 
