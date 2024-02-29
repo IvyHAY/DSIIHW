@@ -31,52 +31,89 @@ testing_data <- read.csv("./HW1/housing_test.csv")
 x <- model.matrix(Sale_Price ~ ., training_data)[,-1]
 # vector of response
 y <- training_data[, "Sale_Price"]
-
-corrplot(cor(x), method = "circle", type = "full",tl.cex = 0.5)
 ```
 
 ```{r}
-cv.lasso <- cv.glmnet(x, y, 
-                      alpha = 1, 
-                      nfolds = 10,
-                      lambda = exp(seq(10, -5, length = 100)))
+ctrl1 <- trainControl(method = "repeatedcv", 
+                      number = 10,
+                      repeats = 5,
+                      selectionFunction = "best") # "oneSE" for the 1SE rule
 
-optimal_lambda <- cv.lasso$lambda.min  # Lambda that gives minimum mean cross-validated error
-lambda_1se <- cv.lasso$lambda.1se  # Lambda within 1SE of the minimum
+set.seed(2)
+lasso.fit <- train(x, y ,
+                   data = training_data,
+                   method = "glmnet",
+                   tuneGrid = expand.grid(alpha = 1,
+                                          lambda = exp(seq(10, -5, length = 100))),
+                   trControl = ctrl1)
 ```
-
 
 ```{r}
-plot(cv.lasso)
+best_tune<- lasso.fit$bestTune
+lambda <- best_tune$lambda
+best_tune
 ```
-When the selected tuning parameter is 69.57632, the test error is 20970.16.
 ```{r}
 x_test <- model.matrix(Sale_Price ~ ., testing_data)[, -1]
 y_test <- testing_data$Sale_Price
+```
 
-lasso_model <- glmnet(x, y, alpha = 1, lambda = optimal_lambda)
-predictions <- predict(lasso_model, s = optimal_lambda, newx = x_test)
+```{r}
+lasso_model <- glmnet(x, y, alpha =1, lambda = lambda)
+predictions <- predict(lasso_model, newx = x_test)
 
-test_error <- sqrt(mean((predictions - y_test)^2) ) # rmse
-optimal_lambda
-test_error
+test_error <- sqrt(mean((predictions - y_test)^2) ) # RMSE
+print(test_error)
+```
+
+When the selected tuning parameter(lambda) is 51.38745	, the test error is 21014.06.(We use rmse to report the test error all the time.)
+
+```{r}
+ctrl2 <- trainControl(method = "repeatedcv", 
+                      number = 10,
+                      repeats = 5,
+                      selectionFunction = "oneSE") # "oneSE" for the 1SE rule
+
+set.seed(2)
+lasso.fit.onse <- train(x, y ,
+                   data = training_data,
+                   method = "glmnet",
+                   tuneGrid = expand.grid(alpha = 1,
+                                          lambda = exp(seq(10, -5, length = 100))),
+                   trControl = ctrl2)
 ```
 
 
 ```{r}
+best_tune.onese<- lasso.fit.onse$bestTune
+lambda_1se <- best_tune.onese$lambda
+best_tune.onese
+```
+
+```{r}
 lasso_model_1se <- glmnet(x, y, alpha = 1, lambda = lambda_1se)
-nonzero_coefficients <- sum(coef(lasso_model_1se, s = lambda_1se) != 0) - 1  # Subtracting 1 for the intercept
+coefficients_1se <- coef(lasso_model_1se, s = lambda_1se)
+nonzero_coefficients <- sum(coefficients_1se != 0) - 1  # Subtracting 1 for the intercept
 print(nonzero_coefficients)
 ```
 
-When the 1SE rule is applied, 29 predictors are included in the model.
+When the 1SE rule is applied, 36 predictors are included in the model.
+
+```{r}
+predictions_1se <- predict(lasso_model_1se , newx = x_test)
+
+test_error_1se <- sqrt(mean((predictions_1se - y_test)^2) ) # RMSE
+```
 
 # (b) Fit an elastic net model on the training data. Report the selected tuning parameters and the test error. Is it possible to apply the 1SE rule to select the tuning parameters for elastic net? If the 1SE rule is applicable, implement it to select the tuning parameters. If not, explain why.
 
 ```{r}
-ctrl1 <- trainControl(method = "cv", number = 10)
-
 set.seed(2)
+ctrl1 <- trainControl(method = "repeatedcv", 
+                      number = 10,
+                      repeats = 5,
+                      selectionFunction = "best") # "oneSE" for the 1SE rule
+
 elasticnet.fit <- train(x, y ,
                    data = training_data,
                    method = "glmnet",
@@ -85,15 +122,15 @@ elasticnet.fit <- train(x, y ,
                    trControl = ctrl1)
 ```
 ```{r}
-best_tune_caret <- elasticnet.fit$bestTune
-alpha <- best_tune_caret$alpha
-lambda <- best_tune_caret$lambda
-best_tune_caret
+best_tune_elasticnet <- elasticnet.fit$bestTune
+alpha_elasticnet <- best_tune_elasticnet$alpha
+lambda_elasticnet <- best_tune_elasticnet$lambda
+best_tune_elasticnet
 ```
-The selected tuning parameters are alpha=0.15, lambda=272.0703. And the test error is 20995.
+The selected tuning parameters are alpha=0.05, lambda=580.3529. And the test error is 20956.9.
 
 ```{r}
-elasticnet_model <- glmnet(x, y, alpha =alpha, lambda = lambda)
+elasticnet_model <- glmnet(x, y, alpha =alpha_elasticnet, lambda = lambda_elasticnet)
 predictions <- predict(elasticnet_model, newx = x_test)
 
 test_error <- sqrt(mean((predictions - y_test)^2) ) # RMSE
@@ -103,36 +140,93 @@ print(test_error)
 It's possible to apply the 1SE rule:
 
 ```{r}
-results <-elasticnet.fit$results
-min_error <- min(results$RMSE)
-min_error_std_error <- results$RMSESD[which.min(results$RMSE)]
+set.seed(2)
+ctrl2 <- trainControl(method = "repeatedcv", 
+                      number = 10,
+                      repeats = 5,
+                      selectionFunction = "oneSE")
+elasticnet.fit.1se <- train(x, y ,
+                   data = training_data,
+                   method = "glmnet",
+                   tuneGrid = expand.grid(alpha = seq(0, 1, length = 21),
+                                          lambda = exp(seq(10, -5, length = 100))),
+                   trControl = ctrl2)
 ```
 
 ```{r}
-lambda_within_1se <- results$lambda[results$RMSE <= min_error + min_error_std_error]
-lambda_1se <- max(lambda_within_1se)  # most regularized model within 1SE
-lambda_1se
+best_tune_elasticnet.1se <- elasticnet.fit.1se$bestTune
+best_tune_elasticnet.1se
+alpha_elasticnet.1se <- best_tune_elasticnet.1se$alpha
+lambda_elasticnet.1se <- best_tune_elasticnet.1se$lambda
+```
+```{r}
+elasticnet_model.1se <- glmnet(x, y, alpha=alpha_elasticnet.1se,lambda= lambda_elasticnet.1se)
+predictions <- predict(elasticnet_model.1se, newx = x_test)
+
+test_error <- sqrt(mean((predictions - y_test)^2) ) # RMSE
+print(test_error)
 ```
 
-When applying the 1SE rule, the best lambda is 18929.65.
+When applying the 1SE rule, the best alpha is 0, the best lambda is 5632.81, the test error is 20652.83, which is smaller than not applying 1SE rule. 
 
 # (c) Fit a partial least squares model on the training data and report the test error. How many components are included in your model?
 
 ```{r}
+set.seed(2)
+pls.fit <- train(x, y,
+                 method = "pls",
+                 tuneGrid = data.frame(ncomp = 1:39),
+                 trControl = ctrl1,
+                 preProcess = c("center", "scale"))
+predy2.pls2 <- predict(pls.fit, newdata = x_test)
+sqrt(mean((y_test - predy2.pls2)^2))
+
+ggplot(pls.fit, highlight = TRUE)
 
 ```
 
-# (d) Choose the best model for predicting the response and explain your choice.
+
+The test error is 21243.27, and 11 components are included in my model.
 
 ```{r}
+set.seed(2)
+pls.fit.onse <- train(x, y,
+                 method = "pls",
+                 tuneGrid = data.frame(ncomp = 1:39),
+                 trControl = ctrl2,
+                 preProcess = c("center", "scale"))
+predy2.pls2.onse <- predict(pls.fit.onse, newdata = x_test)
+sqrt(mean((y_test - predy2.pls2.onse)^2))
+
+ggplot(pls.fit.onse, highlight = TRUE)
 
 ```
+
+When applying the 1se method, the test error is 20796.93, and  6 components are included in the model.
+
+# (d) Choose the best model for predicting the response and explain your choice.
+```{r}
+resamp <- resamples(list(lasso=lasso.fit ,
+                         lasso.1se=lasso.fit.onse,
+                         elastic_net = elasticnet.fit,
+                         elastic_net.1se=elasticnet.fit.1se,
+                         pls=pls.fit,
+                         pls.1se = pls.fit.onse))
+summary(resamp)
+
+bwplot(resamp, metric = "RMSE")
+bwplot(resamp, metric = "Rsquared")
+```
+
+We compare the performance of six different models (lasso, lasso with 1SE rule, elastic net, elastic net with 1SE rule, partial least squares (PLS), and PLS with 1SE rule) using metrics such as Root Mean Square Error (RMSE), and R-squared.
+
+Considering these factors, the pls.1se model shows the lowest RMSE and highest R-squared, which means this model  predicts the response variable more accurately on new, unseen data and explains a greater proportion of variance in the response variable. Besides, we know that PLS with 1SE rule only include 6 components within the model, which meets the Occam's Razor. 
 
 # (e) If “caret” was used for the elastic net in (b), retrain this model with “tidymodels”, and vice versa. Compare the selected tuning parameters between the two software approaches. Should there be discrepancies in the chosen parameters, discuss potential reasons for these differences.
 
 ```{r}
 set.seed(2)
-cv_folds <- vfold_cv(training_data, v = 10) 
+cv_folds <- vfold_cv(training_data, v = 10, repeats = 5)
 
 enet_spec <- linear_reg(penalty = tune(), mixture = tune()) %>% 
   set_engine("glmnet") %>% 
@@ -179,20 +273,18 @@ sqrt(mean((enet_pred[[1]] - testing_data$Sale_Price)^2))
 ```{r}
 # Extract results and apply the 1SE rule
 enet_results <- enet_tune %>% collect_metrics()
+
 min_rmse <- min(enet_results$mean[enet_results$.metric == "rmse"])
 min_rmse_se <- enet_results$std_err[enet_results$mean == min_rmse]
 
 lambda_within_1se <- enet_results$penalty[enet_results$mean <= (min_rmse + min_rmse_se)]
-alpha_within_1se <- enet_results$mixture[enet_results$mean <= (min_rmse + min_rmse_se)]
-
 lambda_1se <- max(lambda_within_1se)
-alpha_1se_candidates <- unique(alpha_within_1se[enet_results$penalty == lambda_1se])
 
-lambda_1se 
+lambda_1se
 ```
 
 
-The selected lambda is 675.2963, and the selected mixture is 0.05. The Test Error is 20918.91. The lambda selected by the tydimodels(675.2963) is different from caret (272.0703). And the selected alpha is different as well. When applying 1SE rule, the selected lambda is 22026.47 by tidymodels, and the lambda selected by caret is 18929.65. The difference in selected tuning parameters (alpha and lambda) suggests that the optimization process and the cross-validation strategy might vary between caret and tidymodels. Each package may have different defaults for handling data splitting, grid search strategies, or even in the underlying implementation of the glmnet function.
+The selected lambda is 675.2963, and the selected mixture is 0.05. The Test Error is 20918.91. The lambda selected by the tydimodels(675.2963) is different from caret (580.3529). But the selected alpha is the same (both equal to 0.05). When applying 1SE rule, the selected lambda is 22026.47 by tidymodels, and the lambda selected by caret is 5632.81. The difference in selected tuning parameters suggests that the optimization process and the cross-validation strategy might vary between caret and tidymodels. Each package may have different defaults for handling data splitting, grid search strategies, or even in the underlying implementation of the glmnet function.
 
 
 
